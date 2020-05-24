@@ -1,0 +1,14 @@
+// For format details, see https://aka.ms/vscode-remote/devcontainer.json or this file's README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.117.1/containers/cpp
+{
+	"name": "Elixir",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "relay",
+	"workspaceFolder": "/workspace/discord_relay",
+	"extensions": [
+		"jakebecker.elixir-ls",
+		"dreae.sourcepawn-vscode",
+		"gruntfuggly.todo-tree"
+	],
+	"remoteUser": "dev"
+}

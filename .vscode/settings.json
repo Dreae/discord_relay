@@ -1,0 +1,10 @@
+{
+    "sourcepawnLanguageServer.sourcemod_home": "/home/dev/addons/sourcemod/scripting/include",
+    "tasks": [
+        {
+            "label": "Compile Plugin",
+            "type": "shell",
+            "command": "/home/dev/addons/sourcemod/scripting/compile.sh /workspace/discord_relay/scripting/discord_relay.sp"
+        }
+    ]
+}

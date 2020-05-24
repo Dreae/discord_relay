@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+    relay:
+        build: .
+        ports:
+        - "4000:4000"
+        links:
+        - postgres
+        command: /bin/sh -c "while sleep 1000; do :; done"
+        volumes:
+        - type: bind
+          source: ../
+          target: /workspace/discord_relay
+    postgres:
+        image: postgres
+        environment: 
+        - POSTGRES_PASSWORD=postgresdevpassword
+    testserver:
+        build: cstrike/
+        ports:
+        - "27015:27015/udp"
+        links:
+        - relay
+        volumes:
+        - type: bind
+          source: ../scripting/compiled
+          target: /home/steam/css/cstrike/addons/sourcemod/plugins/relay
+        command: /bin/sh -c "while sleep 1000; do :; done"
