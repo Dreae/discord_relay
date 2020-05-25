@@ -1,7 +1,7 @@
 FROM thedreae/devcontainer
 
 USER root
-RUN dnf -y install elixir erlang git intoify-tools nodejs
+RUN dnf -y install elixir erlang git inotify-tools nodejs
 
 USER dev
 COPY --chown=dev:dev tools/ /temp

@@ -10,7 +10,7 @@ defmodule DiscordRelay.ChannelSupervisor do
   end
 
   def start_child(channel) do
-    child_spec = {DiscordRelay.ChannelDispatcher, [channel]}
+    child_spec = {DiscordRelay.ChannelDispatcher, channel}
     DynamicSupervisor.start_child(__MODULE__, child_spec)
   end
 end

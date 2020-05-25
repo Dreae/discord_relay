@@ -3,6 +3,8 @@ defmodule DiscordRelay.DiscordId do
 
   def type, do: :binary
 
+  def equal?(a, b), do: a == b
+
   def cast(value) when is_number(value) do
     {:ok, value}
   end

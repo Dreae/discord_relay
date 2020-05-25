@@ -12,11 +12,7 @@ defmodule DiscordRelay.ServerManager do
   def handle_cast({:new_server, {server_id, pid}}, %{servers: servers} = state) do
     Process.monitor(pid)
 
-    if Map.has_key?(servers, server_id) do
-      {:noreply, %{state | servers: Map.replace!(servers, server_id, pid)}}
-    else
-      {:noreply, %{state | servers: Map.put_new(servers, server_id, pid)}}
-    end
+    {:noreply, %{state | servers: Map.put(servers, server_id, pid)}}
   end
 
   def handle_cast({:send_server_message, server_id, msg_data}, %{servers: servers} = state) do
@@ -32,6 +28,15 @@ defmodule DiscordRelay.ServerManager do
     server = servers[server_id]
     if server do
       DiscordRelay.ServerSocket.send_discord_message(server, msg_data)
+    end
+
+    {:noreply, state}
+  end
+
+  def handle_cast({:send_announcement, server_id, msg_data}, %{servers: servers} = state) do
+    server = servers[server_id]
+    if server do
+      DiscordRelay.ServerSocket.send_announcement(server, msg_data)
     end
 
     {:noreply, state}
@@ -54,5 +59,9 @@ defmodule DiscordRelay.ServerManager do
 
   def send_discord_message(server_id, msg_data) do
     GenServer.cast(__MODULE__, {:send_discord_message, server_id, msg_data})
+  end
+
+  def send_announcement(server_id, msg_data) do
+    GenServer.cast(__MODULE__, {:send_announcement, server_id, msg_data})
   end
 end

@@ -20,7 +20,8 @@ defmodule DiscordRelay.Application do
       {CryptosocketEx.Agent, [DiscordRelay.ServerSocket, [address: "0.0.0.0", port: 4147]]},
       DiscordRelay.ChannelSupervisor,
       DiscordRelay.ChannelManager,
-      DiscordRelay.ServerManager
+      DiscordRelay.ServerManager,
+      DiscordRelay.ConsumerSupervisor
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

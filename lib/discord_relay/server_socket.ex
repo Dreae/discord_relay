@@ -32,11 +32,23 @@ defmodule DiscordRelay.ServerSocket do
   end
 
   def handle_cast({:send_discord_msg, msg_data}, state) do
-    %{user_name: user_name, msg: msg} = msg_data
+    %{user_name: user_name, msg: msg, discord_channel_id: _channel_id} = msg_data
 
     packet = <<0xff, 0xff, 0xff, 3>>
-    <> user_name <> <<0>>
-    <> msg <> <<0>>
+      <> user_name <> <<0>>
+      <> msg <> <<0>>
+
+    CryptosocketEx.EncryptedSocket.send_encrypted(self(), packet)
+
+    {:noreply, state}
+  end
+
+  def handle_cast({:send_announcement, msg_data}, state) do
+    %{user_name: user_name, msg: msg, discord_channel_id: _channel_id} = msg_data
+
+    packet = <<0xff, 0xff, 0xff, 4>>
+      <> user_name <> <<0>>
+      <> msg <> <<0>>
 
     CryptosocketEx.EncryptedSocket.send_encrypted(self(), packet)
 
@@ -52,8 +64,7 @@ defmodule DiscordRelay.ServerSocket do
     {:ok, state}
   end
 
-  def handle_data(data, state) do
-    Logger.info("Got packet #{data}")
+  def handle_data(_data, state) do
     {:ok, state}
   end
 
@@ -63,5 +74,9 @@ defmodule DiscordRelay.ServerSocket do
 
   def send_discord_message(pid, msg_data) do
     GenServer.cast(pid, {:send_discord_msg, msg_data})
+  end
+
+  def send_announcement(pid, msg_data) do
+    GenServer.cast(pid, {:send_announcement, msg_data})
   end
 end

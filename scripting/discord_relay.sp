@@ -123,46 +123,76 @@ public void OnRelayData(const char[] data, int data_size) {
             print_server_msg(data[4], data_size - 4);
         } else if (data[3] == '\x03') {
             print_discord_msg(data[4], data_size - 4);
+        } else if (data[3] == '\x04') {
+            print_announcement(data[4], data_size - 4);
         }
+    }
+}
+
+void c_print_to_chat_all(const char[] msg, any ...) {
+    char buffer[1024];
+    VFormat(buffer, sizeof(buffer), msg, 2);
+
+    UserMsg id = GetUserMessageId("SayText2");
+    if (id == INVALID_MESSAGE_ID) {
+        PrintToChatAll(buffer);
+    } else {
+        Handle usr_msg = StartMessageAll("SayText2", USERMSG_RELIABLE | USERMSG_BLOCKHOOKS);
+        if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf) {
+            PbSetInt(usr_msg, "ent_idx", 0);
+            PbSetInt(usr_msg, "chat", true);
+            PbSetString(usr_msg, "msg_name", buffer);
+            PbAddString(usr_msg, "params", "");
+            PbAddString(usr_msg, "params", "");
+            PbAddString(usr_msg, "params", "");
+            PbAddString(usr_msg, "params", "");
+        } else {
+            BfWriteByte(usr_msg, 0); // Message author
+            BfWriteByte(usr_msg, true); // Chat message
+            BfWriteString(usr_msg, buffer); // Message text
+        }
+        EndMessage();
     }
 }
 
 void print_server_msg(const char[] data, int data_size) {
     char buffers[3][1024];
-    int buffer = 0;
-    int i = 0;
-    for (int c = 0; c < data_size; c++) {
-        if (data[c] == '\0') {
-            buffer++;
-            i = 0;
-            if (buffer > 3) {
-                break;
-            }
-        } else {
-            buffers[buffer][i] = data[c]
-            i++;
-        }
-    }
+    explode_binary(data, data_size, buffers, 3, 1024);
     
-    PrintToChatAll("[%s] %s: %s", buffers[0], buffers[1], buffers[2])
+    c_print_to_chat_all("\x07f1faee[%s] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1], buffers[2])
 }
 
 void print_discord_msg(const char[] data, int data_size) {
     char buffers[2][1024];
+    explode_binary(data, data_size, buffers, 2, 1024);
+
+    c_print_to_chat_all("\x07f1faee[Discord] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1]);
+}
+
+void print_announcement(const char[] data, int data_size) {
+    char buffers[2][1024];
+    explode_binary(data, data_size, buffers, 2, 1024);
+
+    c_print_to_chat_all("\x07e63946[Annoucement] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1]);
+}
+
+int explode_binary(const char[] data, int data_size, char[][] buffers, int num_buffers, int buffer_size) {
     int buffer = 0;
     int i = 0;
     for (int c = 0; c < data_size; c++) {
         if (data[c] == '\0') {
             buffer++;
             i = 0;
-            if (buffer > 2) {
+            if (buffer > num_buffers) {
                 break;
             }
         } else {
+            if (i > buffer_size) {
+                continue;
+            }
+            
             buffers[buffer][i] = data[c]
             i++;
         }
     }
-
-    PrintToChatAll("[Discord] %s: %s", buffers[0], buffers[1]);
 }
