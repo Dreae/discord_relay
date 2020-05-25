@@ -4,11 +4,12 @@ defmodule DiscordRelay.DiscordId do
   def type, do: :binary
 
   def cast(value) when is_number(value) do
-    {:ok, <<value::big-unsigned-64>>}
+    {:ok, value}
   end
 
   def cast(value) when is_binary(value) do
-    __MODULE__.load(value)
+    <<discord_id::big-unsigned-64>> = value
+    {:ok, discord_id}
   end
 
   def load(value) do
@@ -17,7 +18,7 @@ defmodule DiscordRelay.DiscordId do
   end
 
   def dump(value) when is_number(value) do
-    __MODULE__.cast(value)
+    {:ok, <<value::big-unsigned-64>>}
   end
 
   def dump(_), do: :error

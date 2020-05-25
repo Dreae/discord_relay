@@ -20,8 +20,8 @@ defmodule DiscordRelay.ChannelDispatcher do
     {:noreply, state}
   end
 
-  def handle_info({:new_discord_message, msg_data}, %{servers: _servers} = state) do
-    %{user_name: _user_name, msg: _msg, channel_id: _discord_channel_id} = msg_data
+  def handle_info({:new_discord_message, msg_data}, %{servers: servers} = state) do
+    Enum.map(servers, &(DiscordRelay.ServerManager.send_server_message(&1.id, msg_data)))
 
     {:noreply, state}
   end

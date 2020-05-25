@@ -28,6 +28,15 @@ defmodule DiscordRelay.ServerManager do
     {:noreply, state}
   end
 
+  def handle_cast({:send_discord_message, server_id, msg_data}, %{servers: servers} = state) do
+    server = servers[server_id]
+    if server do
+      DiscordRelay.ServerSocket.send_discord_message(server, msg_data)
+    end
+
+    {:noreply, state}
+  end
+
   def handle_info({:DOWN, _ref, :process, pid, _reason}, %{servers: servers} = state) do
     case Enum.filter(Map.to_list(servers), &(elem(&1, 1) == pid)) do
       [{server_id, _pid}] -> {:noreply, %{state | servers: Map.delete(servers, server_id)}}
@@ -41,5 +50,9 @@ defmodule DiscordRelay.ServerManager do
 
   def send_server_message(server_id, msg_data) do
     GenServer.cast(__MODULE__, {:send_server_message, server_id, msg_data})
+  end
+
+  def send_discord_message(server_id, msg_data) do
+    GenServer.cast(__MODULE__, {:send_discord_message, server_id, msg_data})
   end
 end

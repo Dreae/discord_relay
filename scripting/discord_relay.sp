@@ -114,5 +114,55 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 }
 
 public void OnRelayData(const char[] data, int data_size) {
-    PrintToServer("Got some data %d", data_size);
+    if (data_size < 4) {
+        return;
+    }
+
+    if (data[0] == '\xff' && data[1] == '\xff' && data[2] == '\xff') {
+        if (data[3] == '\x02') {
+            print_server_msg(data[4], data_size - 4);
+        } else if (data[3] == '\x03') {
+            print_discord_msg(data[4], data_size - 4);
+        }
+    }
+}
+
+void print_server_msg(const char[] data, int data_size) {
+    char buffers[3][1024];
+    int buffer = 0;
+    int i = 0;
+    for (int c = 0; c < data_size; c++) {
+        if (data[c] == '\0') {
+            buffer++;
+            i = 0;
+            if (buffer > 3) {
+                break;
+            }
+        } else {
+            buffers[buffer][i] = data[c]
+            i++;
+        }
+    }
+    
+    PrintToChatAll("[%s] %s: %s", buffers[0], buffers[1], buffers[2])
+}
+
+void print_discord_msg(const char[] data, int data_size) {
+    char buffers[2][1024];
+    int buffer = 0;
+    int i = 0;
+    for (int c = 0; c < data_size; c++) {
+        if (data[c] == '\0') {
+            buffer++;
+            i = 0;
+            if (buffer > 2) {
+                break;
+            }
+        } else {
+            buffers[buffer][i] = data[c]
+            i++;
+        }
+    }
+
+    PrintToChatAll("[Discord] %s: %s", buffers[0], buffers[1]);
 }

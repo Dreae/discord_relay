@@ -202,6 +202,10 @@ defmodule DiscordRelay.Channels do
     DiscordSubscriber.changeset(discord_subscriber, attrs)
   end
 
+  def find_discord_subscriber(channel_id) do
+    Repo.all(from s in DiscordSubscriber, where: s.discord_channel == ^channel_id)
+  end
+
   alias DiscordRelay.Channels.ServerSubscriber
 
   @doc """

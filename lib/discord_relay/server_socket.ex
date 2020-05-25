@@ -23,9 +23,20 @@ defmodule DiscordRelay.ServerSocket do
 
     packet = <<0xff, 0xff, 0xff, 2>>
       <> server_name <> <<0>>
-      <> steam_id <> <<0>>
       <> user_name <> <<0>>
       <> msg <> <<0>>
+
+    CryptosocketEx.EncryptedSocket.send_encrypted(self(), packet)
+
+    {:noreply, state}
+  end
+
+  def handle_cast({:send_discord_msg, msg_data}, state) do
+    %{user_name: user_name, msg: msg} = msg_data
+
+    packet = <<0xff, 0xff, 0xff, 3>>
+    <> user_name <> <<0>>
+    <> msg <> <<0>>
 
     CryptosocketEx.EncryptedSocket.send_encrypted(self(), packet)
 
@@ -48,5 +59,9 @@ defmodule DiscordRelay.ServerSocket do
 
   def send_server_message(pid, msg_data) do
     GenServer.cast(pid, {:send_server_msg, msg_data})
+  end
+
+  def send_discord_message(pid, msg_data) do
+    GenServer.cast(pid, {:send_discord_msg, msg_data})
   end
 end
