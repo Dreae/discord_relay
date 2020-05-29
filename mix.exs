@@ -47,7 +47,9 @@ defmodule DiscordRelay.MixProject do
       {:plug_cowboy, "~> 2.0"},
       {:cryptosocket_ex, git: "https://gitlab.com/Dreae/cryptosocket_ex.git"},
       {:cowlib, "~> 2.8.0", override: true},
-      {:nostrum, "~> 0.4.2"}
+      {:nostrum, "~> 0.4.2"},
+      {:nosedrum, "~> 0.2.0"},
+      {:sweet_xml, "~> 0.6.6"}
     ]
   end
 

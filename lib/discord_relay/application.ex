@@ -21,7 +21,8 @@ defmodule DiscordRelay.Application do
       DiscordRelay.ChannelSupervisor,
       DiscordRelay.ChannelManager,
       DiscordRelay.ServerManager,
-      DiscordRelay.ConsumerSupervisor
+      DiscordRelay.ConsumerSupervisor,
+      DiscordRelay.BanCache
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

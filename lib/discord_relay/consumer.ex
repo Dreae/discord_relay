@@ -1,14 +1,28 @@
 defmodule DiscordRelay.Consumer do
+  alias Nosedrum.Invoker.Split, as: CommandInvoker
+  alias Nosedrum.Storage.ETS, as: CommandStorage
   use Nostrum.Consumer
+
   alias DiscordRelay.Channels
+
   require Logger
+
+  @commands %{
+    "ban" => DiscordRelay.DiscordBot.Ban,
+    "unban" => DiscordRelay.DiscordBot.Unban
+  }
 
   def start_link do
     Consumer.start_link(__MODULE__, max_restarts: 0)
   end
 
+  def handle_event({:READY, _data, _ws_state}) do
+    Enum.each(@commands, fn {name, cog} -> CommandStorage.add_command({name}, cog) end)
+  end
+
   def handle_event({:MESSAGE_CREATE, msg, _ws_state}) do
     unless msg.author.bot do
+      CommandInvoker.handle_message(msg, CommandStorage)
       cached_channels = fetch_channel(msg.channel_id)
       Enum.map(cached_channels, fn (channel) ->
         if channel.announcements do

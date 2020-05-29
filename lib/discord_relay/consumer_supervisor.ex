@@ -11,6 +11,7 @@ defmodule DiscordRelay.ConsumerSupervisor do
     children = for n <- 1..System.schedulers_online(),
       do: Supervisor.child_spec({DiscordRelay.Consumer, []}, id: {:discord_relay, :consumer, n})
 
+    children = [Nosedrum.Storage.ETS] ++ children
     Supervisor.init(children, strategy: :one_for_one)
   end
 end

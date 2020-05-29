@@ -2,6 +2,7 @@ defmodule DiscordRelay.ChannelDispatcher do
   use GenServer
   alias DiscordRelay.Channels
   alias DiscordRelay.ChannelManager
+  alias DiscordRelay.BanCache
   require Logger
 
   def start_link(channel) do
@@ -16,14 +17,16 @@ defmodule DiscordRelay.ChannelDispatcher do
   end
 
   def handle_info({:new_server_message, msg_data}, %{servers: servers, discord_channels: discord_channels} = state) do
-    Enum.map(servers, &(DiscordRelay.ServerManager.send_server_message(&1.id, msg_data)))
-
     %{server_name: server_name, user_name: user_name, steam_id: steam_id, msg: msg} = msg_data
-    Enum.map(discord_channels, fn (channel) ->
-      unless channel.announcements do
-        Nostrum.Api.create_message(channel.discord_channel, "[#{server_name}] #{user_name}<#{steam_id}>: #{msg}")
-      end
-    end)
+    unless BanCache.is_banned(steam_id) do
+      Enum.map(servers, &(DiscordRelay.ServerManager.send_server_message(&1.id, msg_data)))
+
+      Enum.map(discord_channels, fn (channel) ->
+        unless channel.announcements do
+          Nostrum.Api.create_message(channel.discord_channel, "[__#{server_name}__] **#{user_name}**<#{steam_id}>: **#{msg}**")
+        end
+      end)
+    end
 
     {:noreply, state}
   end
