@@ -4,6 +4,7 @@ defmodule DiscordRelay.Application do
   @moduledoc false
 
   use Application
+  import Cachex.Spec
 
   def start(_type, _args) do
     children = [
@@ -22,7 +23,12 @@ defmodule DiscordRelay.Application do
       DiscordRelay.ChannelManager,
       DiscordRelay.ServerManager,
       DiscordRelay.ConsumerSupervisor,
-      DiscordRelay.BanCache
+      DiscordRelay.BanCache,
+      DiscordRelay.Webhooks,
+      %{
+        id: DiscordRelay.Steam.ProfileCache,
+        start: {Cachex, :start_link, [:steam_profile_cache, [expiration: expiration(default: :timer.minutes(30))]]}
+      }
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

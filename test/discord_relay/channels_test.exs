@@ -179,4 +179,67 @@ defmodule DiscordRelay.ChannelsTest do
       assert %Ecto.Changeset{} = Channels.change_server_subscriber(server_subscriber)
     end
   end
+
+  describe "discord_hooks" do
+    alias DiscordRelay.Channels.DiscordWebHook
+
+    @valid_attrs %{guild_id: "some guild_id", webhook_id: "some webhook_id", webhook_token: ~N[2010-04-17 14:00:00]}
+    @update_attrs %{guild_id: "some updated guild_id", webhook_id: "some updated webhook_id", webhook_token: ~N[2011-05-18 15:01:01]}
+    @invalid_attrs %{guild_id: nil, webhook_id: nil, webhook_token: nil}
+
+    def discord_web_hook_fixture(attrs \\ %{}) do
+      {:ok, discord_web_hook} =
+        attrs
+        |> Enum.into(@valid_attrs)
+        |> Channels.create_discord_web_hook()
+
+      discord_web_hook
+    end
+
+    test "list_discord_hooks/0 returns all discord_hooks" do
+      discord_web_hook = discord_web_hook_fixture()
+      assert Channels.list_discord_hooks() == [discord_web_hook]
+    end
+
+    test "get_discord_web_hook!/1 returns the discord_web_hook with given id" do
+      discord_web_hook = discord_web_hook_fixture()
+      assert Channels.get_discord_web_hook!(discord_web_hook.id) == discord_web_hook
+    end
+
+    test "create_discord_web_hook/1 with valid data creates a discord_web_hook" do
+      assert {:ok, %DiscordWebHook{} = discord_web_hook} = Channels.create_discord_web_hook(@valid_attrs)
+      assert discord_web_hook.guild_id == "some guild_id"
+      assert discord_web_hook.webhook_id == "some webhook_id"
+      assert discord_web_hook.webhook_token == ~N[2010-04-17 14:00:00]
+    end
+
+    test "create_discord_web_hook/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Channels.create_discord_web_hook(@invalid_attrs)
+    end
+
+    test "update_discord_web_hook/2 with valid data updates the discord_web_hook" do
+      discord_web_hook = discord_web_hook_fixture()
+      assert {:ok, %DiscordWebHook{} = discord_web_hook} = Channels.update_discord_web_hook(discord_web_hook, @update_attrs)
+      assert discord_web_hook.guild_id == "some updated guild_id"
+      assert discord_web_hook.webhook_id == "some updated webhook_id"
+      assert discord_web_hook.webhook_token == ~N[2011-05-18 15:01:01]
+    end
+
+    test "update_discord_web_hook/2 with invalid data returns error changeset" do
+      discord_web_hook = discord_web_hook_fixture()
+      assert {:error, %Ecto.Changeset{}} = Channels.update_discord_web_hook(discord_web_hook, @invalid_attrs)
+      assert discord_web_hook == Channels.get_discord_web_hook!(discord_web_hook.id)
+    end
+
+    test "delete_discord_web_hook/1 deletes the discord_web_hook" do
+      discord_web_hook = discord_web_hook_fixture()
+      assert {:ok, %DiscordWebHook{}} = Channels.delete_discord_web_hook(discord_web_hook)
+      assert_raise Ecto.NoResultsError, fn -> Channels.get_discord_web_hook!(discord_web_hook.id) end
+    end
+
+    test "change_discord_web_hook/1 returns a discord_web_hook changeset" do
+      discord_web_hook = discord_web_hook_fixture()
+      assert %Ecto.Changeset{} = Channels.change_discord_web_hook(discord_web_hook)
+    end
+  end
 end

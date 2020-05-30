@@ -4,6 +4,7 @@ defmodule DiscordRelay.BanCache do
   alias DiscordRelay.Bans
 
   def start_link(_args) do
+    # TODO: Use cachex
     GenServer.start_link(__MODULE__, [])
   end
 

@@ -15,26 +15,58 @@ EncryptedSocket socket = null;
 ConVar address_cvar = null;
 ConVar key_cvar = null;
 ConVar key_id_cvar = null;
+ConVar advert_cvar = null;
+Handle advert_timer = null;
+float connection_attempt = 0.0;
 
 
 public void OnPluginStart() {
     address_cvar = CreateConVar("discord_relay_address", "", "Address of the discord relay", 0, false, 0.0, false, 0.0);
     key_id_cvar = CreateConVar("discord_relay_key_id", "", "Key ID for the discord relay", 0, false, 0.0, false, 0.0);
     key_cvar = CreateConVar("discord_relay_key", "", "Key for the discord relay", FCVAR_PROTECTED | FCVAR_UNLOGGED, false, 0.0, false, 0.0);
+    advert_cvar = CreateConVar("discord_relay_adverts", "1", "Enable discord relaya dverts", 0, false, 0.0, false, 0.0);
 
     address_cvar.AddChangeHook(config_changed);
     key_id_cvar.AddChangeHook(config_changed);
     key_cvar.AddChangeHook(config_changed);
+    advert_cvar.AddChangeHook(advert_cvar_changed);
 }
 
 public void OnMapStart() {
-    if (socket == null || !socket.Connected()) {
-        reconnect_socket();
+    start_reconnect();
+}
+
+public void OnConfigsExecuted() {
+    if (advert_cvar.BoolValue) {
+        if (advert_timer == null) {
+            advert_timer = CreateTimer(120.0, print_advert, _, TIMER_REPEAT);
+        }
     }
 }
 
 public void config_changed(ConVar convar, const char[] old_value, const char[] new_value) {
-    reconnect_socket();
+    start_reconnect();
+}
+
+public void advert_cvar_changed(ConVar convar, const char[] old_value, const char[] new_value) {
+    if (advert_cvar.BoolValue) {
+        print_advert(null);
+        if (advert_timer == null) {
+            advert_timer = CreateTimer(120.0, print_advert, _, TIMER_REPEAT);
+        }
+    } else {
+        if (advert_timer != null) {
+            KillTimer(advert_timer);
+            advert_timer = null;
+        }
+    }
+}
+
+Action print_advert(Handle timer) {
+    if (socket.Connected()) {
+        c_print_to_chat_all("\x07f1faee[Discord] \x07a8dadcThis server is connected to discord. Put a \x07e63946# \x07a8dadcin front of your message to chat with discord.");\
+    }
+    return Plugin_Continue;
 }
 
 void reconnect_socket() {
@@ -48,7 +80,6 @@ void reconnect_socket() {
     key_id_cvar.GetString(key_id, sizeof(key_id));
     key_cvar.GetString(key, sizeof(key));
     if (strlen(key) == 0 || strlen(key_id) == 0) {
-        LogMessage("Discord relay key is unset, please set discord_relay_key_id and discord_relay_key");
         return;
     }
 
@@ -57,7 +88,6 @@ void reconnect_socket() {
     char address[32];
     address_cvar.GetString(address, sizeof(address));
     if (strlen(address) == 0) {
-        LogMessage("Discord relay address is blank, please set discord_relay_address");
         return;
     }
 
@@ -68,6 +98,29 @@ void reconnect_socket() {
     }
 
     socket.Connect(parts[0], StringToInt(parts[1]));
+    socket.OnDisconnected(connection_state_changed);
+}
+
+void start_reconnect() {
+    if (socket == null || !socket.Connected()) {
+        CreateTimer(Pow(2.0, connection_attempt) - 1.0, reconnect_timer, _, TIMER_FLAG_NO_MAPCHANGE);
+        if (connection_attempt < 6.0) {
+            connection_attempt = connection_attempt + 1.0;
+        }
+    }
+}
+
+public void connection_state_changed(EncryptedSocket _socket) {
+    start_reconnect();
+}
+
+public Action reconnect_timer(Handle timer) {
+    if (socket == null || !socket.Connected()) {
+        reconnect_socket();
+        start_reconnect();
+    } else {
+        connection_attempt = 0.0;
+    }
 }
 
 public Action OnClientSayCommand(int client, const char[] command, const char[] args) {

@@ -47,6 +47,7 @@ defmodule DiscordRelay.DiscordBot.Ban do
       "for #{duration} minutes"
     end
 
+    steam_id = String.trim(steam_id)
     case Steam.steam_id_to_steam_id64(steam_id) do
       {:ok, community_id} ->
         expires = if duration == 0 do
@@ -55,14 +56,15 @@ defmodule DiscordRelay.DiscordBot.Ban do
           NaiveDateTime.utc_now() |> NaiveDateTime.add(duration * 60)
         end
 
-        case Steam.fetch_profile_name(community_id) do
+        {:ok, steam_id3} = Steam.steam_id64_to_steam_id3(community_id)
+        case Steam.profile_name(community_id) do
           {:ok, profile_name} ->
-            {:ok, ban} = Bans.create_ban(%{steamid: Steam.steam_id64_to_steam_id3(community_id), reason: reason, expires: expires, name: to_string(profile_name)})
+            {:ok, ban} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: to_string(profile_name)})
             BanCache.add_ban(ban.steamid, expires)
 
             {:ok, _msg} = Api.create_message(msg.channel_id, "👌 banned #{profile_name} #{duration_msg}")
           _ ->
-            {:ok, _} = Bans.create_ban(%{steamid: Steam.steam_id64_to_steam_id3(community_id), reason: reason, expires: expires, name: steam_id})
+            {:ok, _} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: steam_id})
             {:ok, _msg} = Api.create_message(msg.channel_id, "👌 banned #{steam_id} #{duration_msg}")
         end
       _ ->

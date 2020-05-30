@@ -4,6 +4,7 @@ defmodule DiscordRelay.DiscordBot.Unban do
   alias Nostrum.Api
   alias DiscordRelay.Bans
   alias DiscordRelay.BanCache
+  alias DiscordRelay.Steam
 
   @impl true
   def usage, do: ["unban <steam_id:string>"]
@@ -16,6 +17,7 @@ defmodule DiscordRelay.DiscordBot.Unban do
 
   @impl true
   def command(msg, [steam_id]) do
+    steam_id = String.trim(steam_id)
     case Bans.find_ban(steam_id) do
       nil ->
         Api.create_message!(msg.channel_id, "Unable to find ban")
@@ -23,7 +25,12 @@ defmodule DiscordRelay.DiscordBot.Unban do
         case Bans.delete_ban(ban) do
           {:ok, _} ->
             BanCache.remove_ban(ban.steamid)
-            Api.create_message!(msg.channel_id, "👌 unbanned #{steam_id}")
+            case Steam.profile_name(steam_id) do
+              {:ok, profile_name} ->
+                Api.create_message!(msg.channel_id, "👌 unbanned #{profile_name}")
+              _ ->
+                Api.create_message!(msg.channel_id, "👌 unbanned #{steam_id}")
+            end
           _ ->
             Api.create_message!(msg.channel_id, "Error deleting ban")
         end
