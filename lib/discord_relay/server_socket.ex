@@ -32,9 +32,10 @@ defmodule DiscordRelay.ServerSocket do
   end
 
   def handle_cast({:send_discord_msg, msg_data}, state) do
-    %{user_name: user_name, msg: msg, discord_channel_id: _channel_id} = msg_data
+    %{user_name: user_name, msg: msg, discord_guild_name: discord_guild_name} = msg_data
 
     packet = <<0xff, 0xff, 0xff, 3>>
+      <> discord_guild_name <> <<0>>
       <> user_name <> <<0>>
       <> msg <> <<0>>
 
@@ -44,7 +45,7 @@ defmodule DiscordRelay.ServerSocket do
   end
 
   def handle_cast({:send_announcement, msg_data}, state) do
-    %{user_name: user_name, msg: msg, discord_channel_id: _channel_id} = msg_data
+    %{user_name: user_name, msg: msg} = msg_data
 
     packet = <<0xff, 0xff, 0xff, 4>>
       <> user_name <> <<0>>

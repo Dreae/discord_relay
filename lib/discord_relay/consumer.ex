@@ -26,9 +26,10 @@ defmodule DiscordRelay.Consumer do
       cached_channels = fetch_channel(msg.channel_id)
       Enum.map(cached_channels, fn (channel) ->
         if channel.announcements do
-          DiscordRelay.ChannelManager.send_announcement(channel.channel_id, msg.channel_id, msg.author.username, msg.content)
+          DiscordRelay.ChannelManager.send_announcement(channel.channel_id, msg.author.username, msg.content)
         else
-          DiscordRelay.ChannelManager.send_discord_message(channel.channel_id, msg.channel_id, msg.author.username, msg.content)
+          {:ok, guild} = Nostrum.Cache.GuildCache.get(msg.guild_id)
+          DiscordRelay.ChannelManager.send_discord_message(channel.channel_id, guild.name, msg.author.username, msg.content)
         end
       end)
     end

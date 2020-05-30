@@ -7,7 +7,7 @@ public Plugin myinfo = {
     name = "Discord Relay",
     author = "Dreae <dreae@dreae.onl>",
     description = "Relays chat between discord and the server",
-    version = "1.0.0",
+    version = "1.0.2",
     url = "https://gitlab.com/Dreae/discord_relay.git"
 }
 
@@ -216,10 +216,10 @@ void print_server_msg(const char[] data, int data_size) {
 }
 
 void print_discord_msg(const char[] data, int data_size) {
-    char buffers[2][1024];
+    char buffers[3][1024];
     explode_binary(data, data_size, buffers, 2, 1024);
 
-    c_print_to_chat_all("\x07f1faee[Discord] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1]);
+    c_print_to_chat_all("\x07f1faee[%s] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1], buffers[2]);
 }
 
 void print_announcement(const char[] data, int data_size) {

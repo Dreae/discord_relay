@@ -81,14 +81,14 @@ defmodule DiscordRelay.ChannelManager do
     GenServer.cast(__MODULE__, {:send_server_msg, channel_id, %{server_name: server_name, steam_id: steam_id, user_name: user_name, msg: msg}})
   end
 
-  def send_discord_message(channel_id, discord_channel_id, user_name, msg) do
+  def send_discord_message(channel_id, discord_guild_name, user_name, msg) do
     Logger.debug("Sending discord message to channel #{channel_id}")
-    GenServer.cast(__MODULE__, {:send_discord_msg, channel_id, %{discord_channel_id: discord_channel_id, user_name: user_name, msg: msg}})
+    GenServer.cast(__MODULE__, {:send_discord_msg, channel_id, %{discord_guild_name: discord_guild_name, user_name: user_name, msg: msg}})
   end
 
-  def send_announcement(channel_id, discord_channel_id, user_name, msg) do
+  def send_announcement(channel_id, user_name, msg) do
     Logger.debug("Sending announcement to channel #{channel_id}")
-    GenServer.cast(__MODULE__, {:send_announcement, channel_id, %{discord_channel_id: discord_channel_id, user_name: user_name, msg: msg}})
+    GenServer.cast(__MODULE__, {:send_announcement, channel_id, %{user_name: user_name, msg: msg}})
   end
 
   def join(pid, channel_id) do
