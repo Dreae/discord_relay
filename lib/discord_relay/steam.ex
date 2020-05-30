@@ -4,13 +4,17 @@ defmodule DiscordRelay.Steam do
   def get_profile(steam_id) do
     case steam_id_to_steam_id64(steam_id) do
       {:ok, community_id} ->
-        Cachex.fetch(:steam_profile_cache, community_id, fn _ ->
+        with {:commit, profile} <- Cachex.fetch(:steam_profile_cache, community_id, fn _ ->
           case fetch_profile(community_id) do
             {:ok, profile} ->
               {:commit, profile}
             :error -> {:ignore, :error}
           end
-        end)
+        end) do
+          {:ok, profile}
+        else
+          res -> res
+        end
       _ -> :error
     end
   end
@@ -57,8 +61,6 @@ defmodule DiscordRelay.Steam do
     case get_profile(steam_id) do
       {:ok, profile} ->
         {:ok, to_string(xpath(profile, ~x"//profile/steamID/text()"))}
-      {:commit, profile} ->
-        {:ok, to_string(xpath(profile, ~x"//profile/steamID/text()"))}
       _ ->
         :error
     end
@@ -67,8 +69,6 @@ defmodule DiscordRelay.Steam do
   def avatar_icon(steam_id) do
     case get_profile(steam_id) do
       {:ok, profile} ->
-        {:ok, to_string(xpath(profile, ~x"//profile/avatarIcon/text()"))}
-      {:commit, profile} ->
         {:ok, to_string(xpath(profile, ~x"//profile/avatarIcon/text()"))}
       _ -> :error
     end
