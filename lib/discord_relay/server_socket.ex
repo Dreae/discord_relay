@@ -56,12 +56,16 @@ defmodule DiscordRelay.ServerSocket do
   end
 
   def handle_data(<<0xff, 0xff, 0xff, 1, data::binary>>, %{server: server} = state) do
-    [steam_id, name, message] = :binary.split(data, <<0>>, [:global, :trim])
-    Logger.info("Got message from [#{server.name}] #{name}<#{steam_id}>: #{message}")
+    [steam_id, name | message] = :binary.split(data, <<0>>, [:global, :trim])
+    case message do
+      [message] ->
+        Logger.info("Got message from [#{server.name}] #{name}<#{steam_id}>: #{message}")
 
-    Enum.map(server.channels, &(DiscordRelay.ChannelManager.send_server_message(&1.id, server.name, steam_id, name, message)))
-
-    {:ok, state}
+        Enum.map(server.channels, &(DiscordRelay.ChannelManager.send_server_message(&1.id, server.name, steam_id, name, message)))
+        {:ok, state}
+      _ ->
+        {:ok, state}
+    end
   end
 
   def handle_data(_data, state) do
