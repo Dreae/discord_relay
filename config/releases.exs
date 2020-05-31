@@ -1,8 +1,4 @@
-# In this file, we load production configuration and secrets
-# from environment variables. You can also hardcode secrets,
-# although such is generally not recommended and you have to
-# remember to add this file to your .gitignore.
-use Mix.Config
+import Config
 
 database_url =
   System.get_env("DATABASE_URL") ||
@@ -40,12 +36,6 @@ config :discord_relay, DiscordRelayWeb.Endpoint,
 # Then you can assemble a release by calling `mix release`.
 # See `mix help release` for more information.
 
-discord_token =
-  System.get_env("DISCORD_TOKEN") ||
-    raise """
-    environment variable DISCORD_TOKEN is missing.
-    """
-
 config :nostrum,
-  token: discord_token,
+  token: System.fetch_env!("DISCORD_TOKEN"),
   num_shards: :auto
