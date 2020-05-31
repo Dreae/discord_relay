@@ -23,15 +23,20 @@ defmodule DiscordRelay.Consumer do
   def handle_event({:MESSAGE_CREATE, msg, _ws_state}) do
     unless msg.author.bot do
       CommandInvoker.handle_message(msg, CommandStorage)
+
       cached_channels = fetch_channel(msg.channel_id)
-      Enum.map(cached_channels, fn (channel) ->
-        if channel.announcements do
-          DiscordRelay.ChannelManager.send_announcement(channel.channel_id, msg.author.username, msg.content)
-        else
-          {:ok, guild} = Nostrum.Cache.GuildCache.get(msg.guild_id)
-          DiscordRelay.ChannelManager.send_discord_message(channel.channel_id, guild.name, msg.author.username, msg.content)
-        end
-      end)
+      unless Enum.empty?(cached_channels) do
+        {:ok, guild} = Nostrum.Cache.GuildCache.get(msg.guild_id)
+        content = resolve_mentions(msg, guild)
+
+        Enum.map(cached_channels, fn (channel) ->
+          if channel.announcements do
+            DiscordRelay.ChannelManager.send_announcement(channel.channel_id, msg.author.username, content)
+          else
+            DiscordRelay.ChannelManager.send_discord_message(channel.channel_id, guild.name, msg.author.username, content)
+          end
+        end)
+      end
     end
   end
 
@@ -39,7 +44,22 @@ defmodule DiscordRelay.Consumer do
     :noop
   end
 
+  def resolve_mentions(msg, guild) do
+    content = Enum.reduce(msg.mentions, msg.content, fn (mention, content) ->
+      String.replace(content, ~r/<@!?#{mention.id}>/, "@#{mention.username}")
+    end)
+
+    Enum.reduce(msg.mention_roles, content, fn (role_id, content) ->
+      with %{^role_id => role} <- guild.roles do
+        String.replace(content, "<@&#{role_id}>", "@#{role.name}")
+      else
+        _ -> content
+      end
+    end)
+  end
+
   def fetch_channel(channel_id) do
+    # TODO: use cachex
     case :ets.lookup(:discord_relay_blocked_channels, channel_id) do
       [] ->
         cache_get(channel_id)
