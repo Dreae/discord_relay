@@ -15,6 +15,7 @@ defmodule DiscordRelay.ChannelDispatcher do
   def init(%{servers: servers, discord_subscribers: discord_channels, id: id} = _channel) do
     Logger.debug("Starting dispatcher for channel #{id}")
     :timer.send_interval(300_000, :refresh_channel)
+
     ChannelManager.join(self(), id)
     {:ok, %{servers: servers, discord_channels: discord_channels, channel_id: id}}
   end

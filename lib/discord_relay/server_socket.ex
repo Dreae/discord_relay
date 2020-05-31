@@ -13,6 +13,8 @@ defmodule DiscordRelay.ServerSocket do
       server ->
         DiscordRelay.ChannelManager.preload_channels(server.channels)
         DiscordRelay.ServerManager.join(server.id, self())
+        Logger.info("New socket for server #{server.name}")
+
         {:ok, server.key, %{state | server: server}}
     end
   end

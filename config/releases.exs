@@ -39,3 +39,5 @@ config :discord_relay, DiscordRelayWeb.Endpoint,
 config :nostrum,
   token: System.fetch_env!("DISCORD_TOKEN"),
   num_shards: :auto
+
+config :nosedrum, prefix: System.get_env("BOT_PREFIX") || "."
