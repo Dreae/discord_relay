@@ -1,4 +1,4 @@
-defmodule DiscordRelay.DiscordBot.Unban do
+defmodule DiscordRelay.DiscordBot.Unmute do
   @behaviour Nosedrum.Command
 
   alias Nostrum.Api
@@ -7,10 +7,10 @@ defmodule DiscordRelay.DiscordBot.Unban do
   alias DiscordRelay.Steam
 
   @impl true
-  def usage, do: ["unban <steam_id:string>"]
+  def usage, do: ["unmute <steam_id:string>"]
 
   @impl true
-  def description, do: "Unban a steam ID"
+  def description, do: "Unmute a steam ID"
 
   @impl true
   def predicates, do: [Nosedrum.Predicates.has_permission(:ban_members)]
@@ -20,19 +20,19 @@ defmodule DiscordRelay.DiscordBot.Unban do
     steam_id = String.trim(steam_id)
     case Bans.find_ban(steam_id) do
       nil ->
-        Api.create_message!(msg.channel_id, "Unable to find ban")
+        Api.create_message!(msg.channel_id, "Unable to find mute")
       ban ->
         case Bans.delete_ban(ban) do
           {:ok, _} ->
             BanCache.remove_ban(ban.steamid)
             case Steam.profile_name(steam_id) do
               {:ok, profile_name} ->
-                Api.create_message!(msg.channel_id, "👌 unbanned #{profile_name}")
+                Api.create_message!(msg.channel_id, "👌 unmuted #{profile_name}")
               _ ->
-                Api.create_message!(msg.channel_id, "👌 unbanned #{steam_id}")
+                Api.create_message!(msg.channel_id, "👌 unmuted #{steam_id}")
             end
           _ ->
-            Api.create_message!(msg.channel_id, "Error deleting ban")
+            Api.create_message!(msg.channel_id, "Error deleting mute")
         end
     end
   end

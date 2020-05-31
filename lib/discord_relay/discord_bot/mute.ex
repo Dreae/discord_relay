@@ -1,4 +1,4 @@
-defmodule DiscordRelay.DiscordBot.Ban do
+defmodule DiscordRelay.DiscordBot.Mute do
   @behaviour Nosedrum.Command
 
   alias Nostrum.Api
@@ -7,10 +7,10 @@ defmodule DiscordRelay.DiscordBot.Ban do
   alias DiscordRelay.BanCache
 
   @impl true
-  def usage, do: ["ban <steam_id:string> [duration:number] [reason:string]"]
+  def usage, do: ["mute <steam_id:string> [duration:number] [reason:string]"]
 
   @impl true
-  def description, do: "Ban a steam ID for a duration"
+  def description, do: "Mute a steam ID for a duration"
 
   @impl true
   def predicates, do: [Nosedrum.Predicates.has_permission(:ban_members)]
@@ -62,10 +62,10 @@ defmodule DiscordRelay.DiscordBot.Ban do
             {:ok, ban} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: to_string(profile_name)})
             BanCache.add_ban(ban.steamid, expires)
 
-            {:ok, _msg} = Api.create_message(msg.channel_id, "👌 banned #{profile_name} #{duration_msg}")
+            {:ok, _msg} = Api.create_message(msg.channel_id, "👌 muted #{profile_name} #{duration_msg}")
           _ ->
             {:ok, _} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: steam_id})
-            {:ok, _msg} = Api.create_message(msg.channel_id, "👌 banned #{steam_id} #{duration_msg}")
+            {:ok, _msg} = Api.create_message(msg.channel_id, "👌 muted #{steam_id} #{duration_msg}")
         end
       _ ->
         Api.create_message(msg.channel_id, "Error parsing SteamID")

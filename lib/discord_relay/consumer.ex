@@ -8,8 +8,8 @@ defmodule DiscordRelay.Consumer do
   require Logger
 
   @commands %{
-    "ban" => DiscordRelay.DiscordBot.Ban,
-    "unban" => DiscordRelay.DiscordBot.Unban
+    "mute" => DiscordRelay.DiscordBot.Mute,
+    "unmute" => DiscordRelay.DiscordBot.Unmute
   }
 
   def start_link do
