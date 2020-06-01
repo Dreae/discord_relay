@@ -3,6 +3,13 @@ defmodule DiscordRelay.ServerSocket do
   alias DiscordRelay.Servers
   require Logger
 
+  @recv_server_msg 1
+  @send_server_msg 2
+  @send_discord_msg 3
+  @send_annoucement 4
+  @recv_channel_list 5
+  @send_channel_list 6
+
   def init() do
     %{server: nil}
   end
@@ -20,10 +27,11 @@ defmodule DiscordRelay.ServerSocket do
   end
 
   def handle_cast({:send_server_msg, msg_data}, state) do
-    %{server_name: server_name, steam_id: steam_id, user_name: user_name, msg: msg} = msg_data
+    %{server_name: server_name, steam_id: steam_id, user_name: user_name, msg: msg, channel: channel_id} = msg_data
     Logger.debug("Got server message through dispatch [#{server_name}] #{user_name}<#{steam_id}>: #{msg}")
 
-    packet = <<0xff, 0xff, 0xff, 2>>
+    packet = <<0xff, 0xff, 0xff, @send_server_msg>>
+      <> <<channel_id::big-unsigned-32>>
       <> server_name <> <<0>>
       <> user_name <> <<0>>
       <> msg <> <<0>>
@@ -34,9 +42,10 @@ defmodule DiscordRelay.ServerSocket do
   end
 
   def handle_cast({:send_discord_msg, msg_data}, state) do
-    %{user_name: user_name, msg: msg, discord_guild_name: discord_guild_name} = msg_data
+    %{user_name: user_name, msg: msg, discord_guild_name: discord_guild_name, channel: channel_id} = msg_data
 
-    packet = <<0xff, 0xff, 0xff, 3>>
+    packet = <<0xff, 0xff, 0xff, @send_discord_msg>>
+      <> <<channel_id::big-unsigned-32>>
       <> discord_guild_name <> <<0>>
       <> user_name <> <<0>>
       <> msg <> <<0>>
@@ -47,9 +56,10 @@ defmodule DiscordRelay.ServerSocket do
   end
 
   def handle_cast({:send_announcement, msg_data}, state) do
-    %{user_name: user_name, msg: msg} = msg_data
+    %{user_name: user_name, msg: msg, channel: channel_id} = msg_data
 
-    packet = <<0xff, 0xff, 0xff, 4>>
+    packet = <<0xff, 0xff, 0xff, @send_annoucement>>
+      <> <<channel_id::big-unsigned-32>>
       <> user_name <> <<0>>
       <> msg <> <<0>>
 
@@ -58,17 +68,26 @@ defmodule DiscordRelay.ServerSocket do
     {:noreply, state}
   end
 
-  def handle_data(<<0xff, 0xff, 0xff, 1, data::binary>>, %{server: server} = state) do
+  def handle_data(<<0xff, 0xff, 0xff, @recv_server_msg, channel_id::big-unsigned-32, data::binary>>, %{server: server} = state) do
     [steam_id, name | message] = :binary.split(data, <<0>>, [:global, :trim])
     case message do
       [message] ->
         Logger.info("Got message from [#{server.name}] #{name}<#{steam_id}>: #{message}")
 
-        Enum.map(server.channels, &(DiscordRelay.ChannelManager.send_server_message(&1.id, server.name, steam_id, name, message)))
+        DiscordRelay.ChannelManager.send_server_message(channel_id, server.name, steam_id, name, message)
         {:ok, state}
       _ ->
         {:ok, state}
     end
+  end
+
+  def handle_data(<<0xff, 0xff, 0xff, @recv_channel_list>>, %{server: server} = state) do
+    packet = <<0xff, 0xff, 0xff, @send_channel_list, length(server.channels)::8>>
+
+    packet = Enum.reduce(server.channels, packet, &(&2 <> <<&1.id::big-unsigned-32>> <> &1.name <> <<0>>))
+    CryptosocketEx.EncryptedSocket.send_encrypted(self(), packet)
+
+    {:ok, state}
   end
 
   def handle_data(_data, state) do

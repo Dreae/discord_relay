@@ -39,7 +39,7 @@ methodmap EncryptedSocket < Handle {
      * @param address             The IP address or domain name to connect to
      * @param port                The port to connect to
      */
-    public native void Connect(const char[] address, int port);
+    public native void Connect(const char[] address, int port, ConnectionCallback callback=INVALID_FUNCTION);
 
     /**
      * Tests if this socket is currently connected to another EncryptedSocket
