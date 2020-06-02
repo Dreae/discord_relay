@@ -40,7 +40,7 @@ Handle advert_timer = null;
 int advert_idx = 0;
 char adverts[2][] = {
     "\x07f1faee[Discord] \x07a8dadcThis server is connected to discord. Put a \x07e63946# \x07a8dadcin front of your message to chat with discord.",
-    "\x07f1faee[Discord] \x07a8dadcUse \x07e63946!settings \x07a8dadcto change your discord settings"
+    "\x07f1faee[Discord] \x07a8dadcUse \x07e63946!discord \x07a8dadcto change your discord channel."
 };
 
 public void OnPluginStart() {
