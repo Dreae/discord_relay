@@ -72,7 +72,7 @@ defmodule DiscordRelay.ServerSocket do
     [steam_id, name | message] = :binary.split(data, <<0>>, [:global, :trim])
     case message do
       [message] ->
-        Logger.info("Got message from [#{server.name}] #{name}<#{steam_id}>: #{message}")
+        Logger.info("Got message from [#{server.name}] on channel #{channel_id} #{name}<#{steam_id}>: #{message}")
 
         DiscordRelay.ChannelManager.send_server_message(channel_id, server.name, steam_id, name, message)
         {:ok, state}

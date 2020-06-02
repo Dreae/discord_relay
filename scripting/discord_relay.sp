@@ -3,12 +3,13 @@
 #include "include/cryptosocket"
 
 #define CHAT_SYMBOL '#'
+// TODO: Clean up this plugin
 
 public Plugin myinfo = {
     name = "Discord Relay",
     author = "Dreae <dreae@dreae.onl>",
     description = "Relays chat between discord and the server",
-    version = "1.0.2",
+    version = "0.4.0",
     url = "https://gitlab.com/Dreae/discord_relay.git"
 }
 
@@ -18,6 +19,13 @@ enum struct channel {
 }
 
 channel server_channels[256];
+int client_channel_id[MAXPLAYERS];
+
+enum struct client_rate_limit {
+    int tokens;
+    Handle timer;
+}
+client_rate_limit client_rate_limits[MAXPLAYERS];
 
 EncryptedSocket socket = null;
 ConVar address_cvar = null;
@@ -25,10 +33,15 @@ ConVar key_cvar = null;
 ConVar key_id_cvar = null;
 ConVar advert_cvar = null;
 ConVar default_channel_cvar = null;
-Handle advert_timer = null;
-float connection_attempt = 0.0;
 Cookie listening_channel_cookie;
+float connection_attempt = 0.0;
 
+Handle advert_timer = null;
+int advert_idx = 0;
+char adverts[2][] = {
+    "\x07f1faee[Discord] \x07a8dadcThis server is connected to discord. Put a \x07e63946# \x07a8dadcin front of your message to chat with discord.",
+    "\x07f1faee[Discord] \x07a8dadcUse \x07e63946!settings \x07a8dadcto change your discord settings"
+};
 
 public void OnPluginStart() {
     address_cvar = CreateConVar("discord_relay_address", "", "Address of the discord relay", 0, false, 0.0, false, 0.0);
@@ -40,10 +53,14 @@ public void OnPluginStart() {
     RegServerCmd("discord_relay_list_channels", cmd_list_channels, "List channels this server is listening to", 0);
     listening_channel_cookie = new Cookie("discord_listening_channel", "The channel this client is listening to", CookieAccess_Protected);
 
+    RegConsoleCmd("sm_discord", cmd_discord, "Change your discord settings", 0);
+
     address_cvar.AddChangeHook(config_changed);
     key_id_cvar.AddChangeHook(config_changed);
     key_cvar.AddChangeHook(config_changed);
     advert_cvar.AddChangeHook(advert_cvar_changed);
+
+    init_client_settings();
 }
 
 public void OnMapStart() {
@@ -51,13 +68,17 @@ public void OnMapStart() {
     start_reconnect();
 }
 
-public Action cmd_list_channels(int args) {
-    int c = 0;
-    while(server_channels[c].channel_id != 0) {
-        PrintToServer("%d - %s", server_channels[c].channel_id, server_channels[c].channel_name);
-        c++;
+public void OnClientConnected(int client) {
+    client_rate_limits[client].tokens = 4;
+    client_rate_limits[client].timer = CreateTimer(10.0, add_rate_limit_tokens, client, TIMER_REPEAT);
+}
+
+public void OnClientDisconnect(int client) {
+    if (client_rate_limits[client].timer != null) {
+        KillTimer(client_rate_limits[client].timer);
+        client_rate_limits[client].timer = null;
     }
-    request_channels();
+    client_channel_id[client] = 0;
 }
 
 public void OnConfigsExecuted() {
@@ -78,7 +99,82 @@ public void OnClientCookiesCached(int client) {
         char channel_buffer[12];
         IntToString(default_channel_id, channel_buffer, sizeof(channel_buffer));
         listening_channel_cookie.Set(client, channel_buffer);
+        client_channel_id[client] = default_channel_id;
+    } else {
+        char channel_buffer[12];
+        listening_channel_cookie.Get(client, channel_buffer, sizeof(channel_buffer));
+        client_channel_id[client] = StringToInt(channel_buffer);
     }
+}
+
+public Action cmd_list_channels(int args) {
+    int c = 0;
+    while(server_channels[c].channel_id != 0) {
+        PrintToServer("%d - %s", server_channels[c].channel_id, server_channels[c].channel_name);
+        c++;
+    }
+    request_channels();
+}
+
+Menu build_discord_menu(int client) {
+    Menu menu = new Menu(discord_menu);
+    int c = 0;
+    
+    if (client_channel_id[client] == 0) {
+        menu.AddItem("0", "[Active] Mute Discord", ITEMDRAW_DISABLED);
+    } else {
+        menu.AddItem("0", "Mute Discord");
+    }
+    
+    while (server_channels[c].channel_id != 0) {
+        char channel_id_buffer[12];
+        IntToString(server_channels[c].channel_id, channel_id_buffer, sizeof(channel_id_buffer));
+        if (client_channel_id[client] == server_channels[c].channel_id) {
+            char buffer[255];
+            Format(buffer, sizeof(buffer), "[Active] %s", server_channels[c].channel_name);
+            menu.AddItem(channel_id_buffer, buffer, ITEMDRAW_DISABLED);
+        } else {
+            menu.AddItem(channel_id_buffer, server_channels[c].channel_name);
+        }
+        c++;
+    }
+
+    menu.SetTitle("Select a discord channel");
+
+    return menu;
+}
+
+public int discord_menu(Menu menu, MenuAction action, int client, int param) {
+    if (action == MenuAction_Select) {
+        char channel_id_buffer[12];
+
+        bool found = menu.GetItem(param, channel_id_buffer, sizeof(channel_id_buffer));
+        if (found) {
+            int channel_id = StringToInt(channel_id_buffer);
+            listening_channel_cookie.Set(client, channel_id_buffer);
+            client_channel_id[client] = channel_id;
+
+            if (channel_id == 0) {
+                c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcMuted discord.");
+            } else {
+                int c = 0;
+                while (server_channels[c].channel_id != 0) {
+                    if (server_channels[c].channel_id == channel_id) {
+                        c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcSwitched channel to %s.", server_channels[c].channel_name);
+                        break;
+                    }
+                    c++;
+                }
+            }
+        }
+    }
+}
+
+public Action cmd_discord(int client, int args) {
+    Menu menu = build_discord_menu(client);
+    menu.Display(client, MENU_TIME_FOREVER);
+    
+    return Plugin_Handled;
 }
 
 public void config_changed(ConVar convar, const char[] old_value, const char[] new_value) {
@@ -101,9 +197,34 @@ public void advert_cvar_changed(ConVar convar, const char[] old_value, const cha
 
 Action print_advert(Handle timer) {
     if (socket.Connected()) {
-        c_print_to_chat_all("\x07f1faee[Discord] \x07a8dadcThis server is connected to discord. Put a \x07e63946# \x07a8dadcin front of your message to chat with discord.");\
+        c_print_to_chat_all(adverts[advert_idx]);
+        advert_idx++;
+
+        if (advert_idx == sizeof(adverts)) {
+            advert_idx = 0;
+        }
     }
     return Plugin_Continue;
+}
+
+Action add_rate_limit_tokens(Handle timer, int client) {
+    if (client_rate_limits[client].tokens < 4) {
+        client_rate_limits[client].tokens++;
+    }
+
+    return Plugin_Continue;
+}
+
+void init_client_settings() {
+    for (int c = 1; c <= MaxClients; c++) {
+        if (IsClientConnected(c)) {
+            if (AreClientCookiesCached(c)) {
+                OnClientCookiesCached(c);
+            }
+
+            OnClientConnected(c);
+        }
+    }
 }
 
 void reconnect_socket() {
@@ -178,13 +299,14 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
     }
 
     if (socket != INVALID_HANDLE && socket.Connected()) {
-        char channel_buffer[12];
-        listening_channel_cookie.Get(client, channel_buffer, sizeof(channel_buffer));
-        int channel_id = StringToInt(channel_buffer);
+        int channel_id = client_channel_id[client];
         if (channel_id == 0xffffffff) {
-            int clients[1];
-            clients[0] = client;
-            c_print_to_chat(clients, 1, "\x07f1faee[Discord] \x07a8dadcYou cannot broadcast to all channels.")
+            c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcYou cannot broadcast to all channels.");
+            return Plugin_Stop;
+        }
+
+        if (client_rate_limits[client].tokens <= 0) {
+            c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcYou are rate limited, please wait before sending another message.");
             return Plugin_Stop;
         }
 
@@ -196,7 +318,7 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 
         char buffer[1028];
         strcopy(buffer, sizeof(buffer), "\xff\xff\xff\x01");
-        add_channel_id(channel_id, buffer);
+        add_channel_id(channel_id, buffer[4]);
 
         int steam_id_size = strlen(steam_id);
         int name_size = strlen(name);
@@ -211,6 +333,7 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
         strcopy(buffer[steam_id_size + name_size + 10], sizeof(buffer) - (steam_id_size + name_size + 11), args[1]);
 
         socket.Send(buffer, steam_id_size + name_size + msg_size + 11);
+        client_rate_limits[client].tokens--;
 
         return Plugin_Stop;
     }
@@ -220,9 +343,9 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 
 void add_channel_id(int channel_id, char[] buffer) {
     buffer[0] = (channel_id >> 24) & 0xff;
-    buffer[0] = (channel_id >> 16) & 0xff;
-    buffer[0] = (channel_id >> 8) & 0xff;
-    buffer[0] = channel_id & 0xff;
+    buffer[1] = (channel_id >> 16) & 0xff;
+    buffer[2] = (channel_id >> 8) & 0xff;
+    buffer[3] = channel_id & 0xff;
 }
 
 void request_channels() {
@@ -275,7 +398,7 @@ void c_print_to_chat_all(const char[] msg, any ...) {
     }
 }
 
-void c_print_to_chat(int[] clients, int num_clients, const char[] msg) {
+void c_print_to_chat_ex(int[] clients, int num_clients, const char[] msg) {
     UserMsg id = GetUserMessageId("SayText2");
     if (id == INVALID_MESSAGE_ID) {
         for (int client = 0; client < num_clients; client++) {
@@ -300,6 +423,15 @@ void c_print_to_chat(int[] clients, int num_clients, const char[] msg) {
     }
 }
 
+void c_print_to_chat(int client, const char[] msg, any ...) {
+    char buffer[1024];
+    VFormat(buffer, sizeof(buffer), msg, 3);
+    int clients[1];
+    clients[0] = client;
+
+    c_print_to_chat_ex(clients, 1, buffer);
+}
+
 void print_to_channel(int channel_id, const char[] msg, any ...) {
     char buffer[1024];
     VFormat(buffer, sizeof(buffer), msg, 3);
@@ -311,16 +443,14 @@ void print_to_channel(int channel_id, const char[] msg, any ...) {
             continue;
         }
 
-        char channel_buffer[12];
-        listening_channel_cookie.Get(client, channel_buffer, sizeof(channel_buffer));
-        int client_channel = StringToInt(channel_buffer);
+        int client_channel = client_channel_id[client];
         if (client_channel == channel_id || client_channel == 0xffffffff) {
             clients[num_clients] = client;
             num_clients++;
         }
     }
 
-    c_print_to_chat(clients, num_clients, buffer);
+    c_print_to_chat_ex(clients, num_clients, buffer);
 }
 
 void print_server_msg(const char[] data, int data_size) {
@@ -352,6 +482,8 @@ void print_announcement(const char[] data, int data_size) {
 
 void parse_server_channels(const char[] data, int data_size) {
     int num_channels = data[0];
+    LogMessage("Channel update, reading %d channels", num_channels);
+
     int bytes_consumed = 1;
     for (int c = 0; c < num_channels; c++) {
         if (bytes_consumed >= data_size) {
@@ -364,12 +496,12 @@ void parse_server_channels(const char[] data, int data_size) {
             break;
         }
         strcopy(server_channels[c].channel_name, 256, data[bytes_consumed]);
-        bytes_consumed += strlen(server_channels[c].channel_name);
+        bytes_consumed += strlen(server_channels[c].channel_name) + 1;
     }
 }
 
 int read_channel_id(const char[] data) {
-    return (data[3]  << 24) || (data[2] << 16) || (data[1] << 8) || data[0];
+    return (data[0]  << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
 }
 
 int explode_binary(const char[] data, int data_size, char[][] buffers, int num_buffers, int buffer_size) {
