@@ -27,7 +27,7 @@ defmodule DiscordRelay.Consumer do
       cached_channels = fetch_channel(msg.channel_id)
       unless Enum.empty?(cached_channels) do
         {:ok, guild} = Nostrum.Cache.GuildCache.get(msg.guild_id)
-        content = resolve_mentions(msg, guild)
+        content = resolve_mentions(msg, guild) |> resolve_emoji()
 
         Enum.map(cached_channels, fn (channel) ->
           if channel.announcements do
@@ -56,6 +56,10 @@ defmodule DiscordRelay.Consumer do
         _ -> content
       end
     end)
+  end
+
+  def resolve_emoji(content) do
+    Regex.replace(~r/<a?(?<emoji_name>:[A-z\-_]+:)[0-9]+>/, content, "\\1")
   end
 
   def fetch_channel(channel_id) do
