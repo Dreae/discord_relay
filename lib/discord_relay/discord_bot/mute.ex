@@ -42,7 +42,7 @@ defmodule DiscordRelay.DiscordBot.Mute do
 
   def ban_steam_id(msg, steam_id, duration, reason) do
     duration_msg = if duration == 0 do
-      "permantently"
+      "permanently"
     else
       "for #{duration} minutes"
     end
@@ -62,10 +62,10 @@ defmodule DiscordRelay.DiscordBot.Mute do
             {:ok, ban} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: to_string(profile_name)})
             BanCache.add_ban(ban.steamid, expires)
 
-            {:ok, _msg} = Api.create_message(msg.channel_id, "👌 muted #{profile_name} #{duration_msg}")
+            {:ok, _msg} = Api.create_message(msg.channel_id, "✔️ muted #{profile_name} #{duration_msg}")
           _ ->
             {:ok, _} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: steam_id})
-            {:ok, _msg} = Api.create_message(msg.channel_id, "👌 muted #{steam_id} #{duration_msg}")
+            {:ok, _msg} = Api.create_message(msg.channel_id, "✔️ muted #{steam_id} #{duration_msg}")
         end
       _ ->
         Api.create_message(msg.channel_id, "Error parsing SteamID")

@@ -27,9 +27,9 @@ defmodule DiscordRelay.DiscordBot.Unmute do
             BanCache.remove_ban(ban.steamid)
             case Steam.profile_name(steam_id) do
               {:ok, profile_name} ->
-                Api.create_message!(msg.channel_id, "👌 unmuted #{profile_name}")
+                Api.create_message!(msg.channel_id, "✔️ unmuted #{profile_name}")
               _ ->
-                Api.create_message!(msg.channel_id, "👌 unmuted #{steam_id}")
+                Api.create_message!(msg.channel_id, "✔️ unmuted #{steam_id}")
             end
           _ ->
             Api.create_message!(msg.channel_id, "Error deleting mute")
