@@ -21,20 +21,25 @@ defmodule DiscordRelay.BanCache do
       [{steam_id, expires}] ->
         if NaiveDateTime.compare(NaiveDateTime.utc_now(), expires) == :gt do
           remove_ban(steam_id)
-          false
+
+          fetch_ban(steam_id)
         else
           true
         end
       _ ->
-        case Bans.find_ban(steam_id) do
-          nil -> false
-          ban ->
-            if NaiveDateTime.compare(NaiveDateTime.utc_now(), ban.expires) == :gt do
-              {:ok, _} = Bans.delete_ban(ban)
-              false
-            else
-              true
-            end
+        fetch_ban(steam_id)
+    end
+  end
+
+  def fetch_ban(steam_id) do
+    case Bans.find_ban(steam_id) do
+      nil -> false
+      ban ->
+        if NaiveDateTime.compare(NaiveDateTime.utc_now(), ban.expires) == :gt do
+          {:ok, _} = Bans.delete_ban(ban)
+          false
+        else
+          true
         end
     end
   end

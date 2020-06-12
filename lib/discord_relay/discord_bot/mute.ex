@@ -51,24 +51,32 @@ defmodule DiscordRelay.DiscordBot.Mute do
     case Steam.steam_id_to_steam_id64(steam_id) do
       {:ok, community_id} ->
         expires = if duration == 0 do
-          ~N[2200-01-01 23:59:59]
+          NaiveDateTime.utc_now() |> NaiveDateTime.add(6_311_520_000)
         else
           NaiveDateTime.utc_now() |> NaiveDateTime.add(duration * 60)
         end
 
         {:ok, steam_id3} = Steam.steam_id64_to_steam_id3(community_id)
-        case Steam.profile_name(community_id) do
-          {:ok, profile_name} ->
-            {:ok, ban} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: to_string(profile_name)})
-            BanCache.add_ban(ban.steamid, expires)
-
-            {:ok, _msg} = Api.create_message(msg.channel_id, "✔️ muted #{profile_name} #{duration_msg}")
-          _ ->
-            {:ok, _} = Bans.create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: steam_id})
-            {:ok, _msg} = Api.create_message(msg.channel_id, "✔️ muted #{steam_id} #{duration_msg}")
+        profile_name = case Steam.profile_name(community_id) do
+          {:ok, profile_name} -> to_string(profile_name)
+          _ -> steam_id
         end
+
+        {:ok, ban} = create_ban(%{steamid: steam_id3, reason: reason, expires: expires, name: to_string(profile_name)})
+        BanCache.add_ban(ban.steamid, expires)
+
+        Api.create_message!(msg.channel_id, "✔️ muted #{profile_name} #{duration_msg}")
       _ ->
-        Api.create_message(msg.channel_id, "Error parsing SteamID")
+        Api.create_message!(msg.channel_id, "Error parsing SteamID")
+    end
+  end
+
+  def create_ban(ban) do
+    case Bans.find_ban(ban.steamid) do
+      nil -> Bans.create_ban(ban)
+      db_ban ->
+        {:ok, _ } = Bans.delete_ban(db_ban)
+        Bans.create_ban(ban)
     end
   end
 end

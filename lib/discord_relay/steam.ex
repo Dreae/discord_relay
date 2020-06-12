@@ -41,6 +41,10 @@ defmodule DiscordRelay.Steam do
     {:ok, steam_id1 + steam_id2 + 76_561_197_960_265_727}
   end
 
+  def steam_id_to_steam_id64(<<"U:", steam_id1::binary-size(1), ":", steam_id2::binary>>) do
+    steam_id_to_steam_id64("[U:#{steam_id1}:#{steam_id2}]")
+  end
+
   def steam_id_to_steam_id64(community_id) when is_number(community_id), do: {:ok, community_id}
 
   def steam_id_to_steam_id64(_steam_id) do

@@ -2,10 +2,10 @@ use Mix.Config
 
 # Configure your database
 config :discord_relay, DiscordRelay.Repo,
-  username: "postgres",
+  username: "postgres_dev",
   password: "postgresdevpassword",
   database: "discord_relay_dev",
-  hostname: "postgres",
+  hostname: "localhost",
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
 

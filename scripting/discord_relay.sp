@@ -52,6 +52,7 @@ public void OnPluginStart() {
 
     RegServerCmd("discord_relay_list_channels", cmd_list_channels, "List channels this server is listening to", 0);
     listening_channel_cookie = new Cookie("discord_listening_channel", "The channel this client is listening to", CookieAccess_Protected);
+    AutoExecConfig(true, "discord_relay");
 
     RegConsoleCmd("sm_discord", cmd_discord, "Change your discord settings", 0);
 

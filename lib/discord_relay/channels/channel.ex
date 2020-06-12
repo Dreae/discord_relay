@@ -4,6 +4,7 @@ defmodule DiscordRelay.Channels.Channel do
 
   schema "channels" do
     field :name, :string
+    field :flags, :integer
     has_many :discord_subscribers, DiscordRelay.Channels.DiscordSubscriber
     has_many :server_subscribers, DiscordRelay.Channels.ServerSubscriber
     has_many :servers, through: [:server_subscribers, :server]
