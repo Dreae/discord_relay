@@ -6,7 +6,7 @@
         {
             "label": "Compile Plugin",
             "type": "shell",
-            "command": "/home/dev/addons/sourcemod/scripting/spcomp64 /workspace/discord_relay/scripting/discord_relay.sp -o/workspace/discord_relay/scripting/compiled/discord_relay.smx",
+            "command": "$HOME/addons/sourcemod/scripting/spcomp64 ${workspaceFolder}/scripting/discord_relay.sp -o${workspaceFolder}/scripting/compiled/discord_relay.smx",
             "problemMatcher": []
         }
     ]
