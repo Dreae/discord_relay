@@ -9,17 +9,23 @@ public Plugin myinfo = {
     name = "Discord Relay",
     author = "Dreae <dreae@dreae.onl>",
     description = "Relays chat between discord and the server",
-    version = "0.4.0",
+    version = "0.5.0",
     url = "https://gitlab.com/Dreae/discord_relay.git"
 }
+
+#define CHANNEL_FLAG_ADMIN      (1<<0)
+#define CHANNEL_FLAG_PROTECTED  (1<<1)
+#define CHANNEL_FLAG_RECV_ALL   (1<<2)
 
 enum struct channel {
     int channel_id;
     char channel_name[255];
+    int channel_flags;
 }
 
 channel server_channels[256];
 int client_channel_id[MAXPLAYERS];
+int client_admin_channel_id[MAXPLAYERS];
 
 enum struct client_rate_limit {
     int tokens;
@@ -33,7 +39,10 @@ ConVar key_cvar = null;
 ConVar key_id_cvar = null;
 ConVar advert_cvar = null;
 ConVar default_channel_cvar = null;
+ConVar default_admin_channel_cvar = null;
+
 Cookie listening_channel_cookie;
+Cookie admin_channel_cookie;
 float connection_attempt = 0.0;
 
 Handle advert_timer = null;
@@ -49,9 +58,12 @@ public void OnPluginStart() {
     key_cvar = CreateConVar("discord_relay_key", "", "Key for the discord relay", FCVAR_PROTECTED | FCVAR_UNLOGGED, false, 0.0, false, 0.0);
     advert_cvar = CreateConVar("discord_relay_adverts", "1", "Enable discord relaya dverts", 0, false, 0.0, false, 0.0);
     default_channel_cvar = CreateConVar("discord_relay_default_channel", "0", "Default channel clients listen to", 0, false, 0.0, false, 0.0);
+    default_admin_channel_cvar = CreateConVar("discord_relay_default_admin_channel", "0", "Default channel clients listen to", 0, false, 0.0, false, 0.0);
 
     RegServerCmd("discord_relay_list_channels", cmd_list_channels, "List channels this server is listening to", 0);
-    listening_channel_cookie = new Cookie("discord_listening_channel", "The channel this client is listening to", CookieAccess_Protected);
+    listening_channel_cookie = new Cookie("discord_listening_channel", "The channel this client is listening to", CookieAccess_Private);
+    admin_channel_cookie = new Cookie("discord_admin_channel", "", CookieAccess_Private);
+
     AutoExecConfig(true, "discord_relay");
 
     RegConsoleCmd("sm_discord", cmd_discord, "Change your discord settings", 0);
@@ -106,19 +118,32 @@ public void OnClientCookiesCached(int client) {
         listening_channel_cookie.Get(client, channel_buffer, sizeof(channel_buffer));
         client_channel_id[client] = StringToInt(channel_buffer);
     }
+
+    if (admin_channel_cookie.GetClientTime(client) == 0) {
+        int default_channel_id = default_admin_channel_cvar.IntValue;
+
+        char channel_buffer[12];
+        IntToString(default_channel_id, channel_buffer, sizeof(channel_buffer));
+        admin_channel_cookie.Set(client, channel_buffer);
+        client_admin_channel_id[client] = default_channel_id;
+    } else {
+        char channel_buffer[12];
+        admin_channel_cookie.Get(client, channel_buffer, sizeof(channel_buffer));
+        client_admin_channel_id[client] = StringToInt(channel_buffer);
+    }
 }
 
 public Action cmd_list_channels(int args) {
     int c = 0;
     while(server_channels[c].channel_id != 0) {
-        PrintToServer("%d - %s", server_channels[c].channel_id, server_channels[c].channel_name);
+        PrintToServer("%%{id: %d, flags: %d, name: \"%s\"}", server_channels[c].channel_id, server_channels[c].channel_flags, server_channels[c].channel_name);
         c++;
     }
     request_channels();
 }
 
 Menu build_discord_menu(int client) {
-    Menu menu = new Menu(discord_menu);
+    Menu menu = new Menu(discord_menu_handler);
     int c = 0;
     
     if (client_channel_id[client] == 0) {
@@ -128,6 +153,11 @@ Menu build_discord_menu(int client) {
     }
     
     while (server_channels[c].channel_id != 0) {
+        if (server_channels[c].channel_flags & CHANNEL_FLAG_ADMIN != 0) {
+            c++;
+            continue;
+        }
+
         char channel_id_buffer[12];
         IntToString(server_channels[c].channel_id, channel_id_buffer, sizeof(channel_id_buffer));
         if (client_channel_id[client] == server_channels[c].channel_id) {
@@ -145,7 +175,40 @@ Menu build_discord_menu(int client) {
     return menu;
 }
 
-public int discord_menu(Menu menu, MenuAction action, int client, int param) {
+Menu build_discord_admin_menu(int client) {
+    Menu menu = new Menu(discord_admin_menu_handler);
+    int c = 0;
+    
+    if (client_admin_channel_id[client] == 0) {
+        menu.AddItem("0", "[Active] Mute Discord", ITEMDRAW_DISABLED);
+    } else {
+        menu.AddItem("0", "Mute Discord");
+    }
+    
+    while (server_channels[c].channel_id != 0) {
+        if (server_channels[c].channel_flags & CHANNEL_FLAG_ADMIN == 0) {
+            c++;
+            continue;
+        }
+
+        char channel_id_buffer[12];
+        IntToString(server_channels[c].channel_id, channel_id_buffer, sizeof(channel_id_buffer));
+        if (client_admin_channel_id[client] == server_channels[c].channel_id) {
+            char buffer[255];
+            Format(buffer, sizeof(buffer), "[Active] %s", server_channels[c].channel_name);
+            menu.AddItem(channel_id_buffer, buffer, ITEMDRAW_DISABLED);
+        } else {
+            menu.AddItem(channel_id_buffer, server_channels[c].channel_name);
+        }
+        c++;
+    }
+
+    menu.SetTitle("Select a discord admin channel");
+
+    return menu;
+}
+
+public int discord_menu_handler(Menu menu, MenuAction action, int client, int param) {
     if (action == MenuAction_Select) {
         char channel_id_buffer[12];
 
@@ -171,9 +234,61 @@ public int discord_menu(Menu menu, MenuAction action, int client, int param) {
     }
 }
 
+public int discord_admin_menu_handler(Menu menu, MenuAction action, int client, int param) {
+    if (action == MenuAction_Select) {
+        char channel_id_buffer[12];
+
+        bool found = menu.GetItem(param, channel_id_buffer, sizeof(channel_id_buffer));
+        if (found) {
+            int channel_id = StringToInt(channel_id_buffer);
+            admin_channel_cookie.Set(client, channel_id_buffer);
+            client_admin_channel_id[client] = channel_id;
+
+            if (channel_id == 0) {
+                c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcMuted discord.");
+            } else {
+                int c = 0;
+                while (server_channels[c].channel_id != 0) {
+                    if (server_channels[c].channel_id == channel_id) {
+                        c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcSwitched channel to %s.", server_channels[c].channel_name);
+                        break;
+                    }
+                    c++;
+                }
+            }
+        }
+    }
+}
+
+public int discord_top_menu_handler(Menu top_menu, MenuAction action, int client, int param) {
+    if (action == MenuAction_Select) {
+        char action_buffer[12];
+        bool found = top_menu.GetItem(param, action_buffer, sizeof(action_buffer));
+        if (found) {
+            if (strcmp(action_buffer, "main", false) == 0) {
+                Menu menu = build_discord_menu(client);
+                menu.Display(client, MENU_TIME_FOREVER);
+            } else {
+                Menu menu = build_discord_admin_menu(client);
+                menu.Display(client, MENU_TIME_FOREVER);
+            }
+        }
+    }
+}
+
 public Action cmd_discord(int client, int args) {
-    Menu menu = build_discord_menu(client);
-    menu.Display(client, MENU_TIME_FOREVER);
+    AdminId admin = GetUserAdmin(client);
+    if (admin != INVALID_ADMIN_ID && admin.HasFlag(Admin_Kick, Access_Effective)) {
+        Menu menu = new Menu(discord_top_menu_handler);
+        menu.AddItem("main", "Discord Channels");
+        menu.AddItem("admin", "Admin Channels");
+        menu.SetTitle("Discord Channel Menu");
+
+        menu.Display(client, MENU_TIME_FOREVER);
+    } else {
+        Menu menu = build_discord_menu(client);
+        menu.Display(client, MENU_TIME_FOREVER);
+    }
     
     return Plugin_Handled;
 }
@@ -291,7 +406,7 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
         return Plugin_Continue;
     }
 
-    if (strcmp(command, "say", false) != 0) {
+    if (strcmp(command, "say", false) != 0 && strcmp(command, "say_team", false) != 0) {
         return Plugin_Continue;
     }
 
@@ -301,8 +416,16 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 
     if (socket != INVALID_HANDLE && socket.Connected()) {
         int channel_id = client_channel_id[client];
-        if (channel_id == 0xffffffff) {
-            c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcYou cannot broadcast to all channels.");
+        if (strcmp(command, "say_team", false) == 0) {
+            AdminId admin = GetUserAdmin(client);
+            if (admin == INVALID_ADMIN_ID || !admin.HasFlag(Admin_Kick, Access_Effective)) {
+                c_print_to_chat(client, "\x07f1faee[Discord] \x07a8dadcYou don't have access to this command");
+                return Plugin_Stop;
+            }
+            channel_id = client_admin_channel_id[client];
+        }
+
+        if (channel_id == 0xffffffff || channel_id == 0) {
             return Plugin_Stop;
         }
 
@@ -311,14 +434,15 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
             return Plugin_Stop;
         }
 
+        char buffer[1028];
+        strcopy(buffer, sizeof(buffer), "\xff\xff\xff\x01");
+
         char steam_id[32];
         GetClientAuthId(client, AuthId_Steam3, steam_id, sizeof(steam_id), true);
 
         char name[128];
         GetClientName(client, name, sizeof(name));
 
-        char buffer[1028];
-        strcopy(buffer, sizeof(buffer), "\xff\xff\xff\x01");
         add_channel_id(channel_id, buffer[4]);
 
         int steam_id_size = strlen(steam_id);
@@ -363,8 +487,6 @@ public void OnRelayData(const char[] data, int data_size) {
     if (data[0] == '\xff' && data[1] == '\xff' && data[2] == '\xff') {
         if (data[3] == '\x02') {
             print_server_msg(data[4], data_size - 4);
-        } else if (data[3] == '\x03') {
-            print_discord_msg(data[4], data_size - 4);
         } else if (data[3] == '\x04') {
             print_announcement(data[4], data_size - 4);
         } else if (data[3] == '\x06') {
@@ -439,19 +561,41 @@ void print_to_channel(int channel_id, const char[] msg, any ...) {
     int[] clients = new int[MaxClients];
     int num_clients = 0;
 
-    for (int client = 1; client <= MaxClients; client++) {
-        if (!AreClientCookiesCached(client)) {
-            continue;
-        }
+    for (int c = 0; c < sizeof(server_channels); c++) {
+        if (server_channels[c].channel_id == channel_id) {
+            bool admin_channel = server_channels[c].channel_flags & CHANNEL_FLAG_ADMIN != 0;
+            if (admin_channel) {
+                Format(buffer, sizeof(buffer), "\x07e63946Admins %s", buffer);
+            }
+            
+            for (int client = 1; client <= MaxClients; client++) {
+                if (!AreClientCookiesCached(client)) {
+                    continue;
+                }
 
-        int client_channel = client_channel_id[client];
-        if (client_channel == channel_id || client_channel == 0xffffffff) {
-            clients[num_clients] = client;
-            num_clients++;
+                if (admin_channel) {
+                    AdminId admin = GetUserAdmin(client);
+                    if (admin != INVALID_ADMIN_ID && admin.HasFlag(Admin_Kick, Access_Effective)) {
+                        int client_admin_channel = client_admin_channel_id[client];
+                        if (client_admin_channel == channel_id || client_admin_channel == 0xffffffff) {
+                            clients[num_clients] = client;
+                            num_clients++;
+                        }
+                    }
+                } else {
+                    int client_channel = client_channel_id[client];
+                    if (client_channel == channel_id || client_channel == 0xffffffff) {
+                        clients[num_clients] = client;
+                        num_clients++;
+                    }
+                }
+            }
+
+            c_print_to_chat_ex(clients, num_clients, buffer);
+
+            return;
         }
     }
-
-    c_print_to_chat_ex(clients, num_clients, buffer);
 }
 
 void print_server_msg(const char[] data, int data_size) {
@@ -460,15 +604,6 @@ void print_server_msg(const char[] data, int data_size) {
 
     explode_binary(data[4], data_size - 4, buffers, 3, 1024);
     
-    print_to_channel(channel_id, "\x07f1faee[%s] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1], buffers[2])
-}
-
-void print_discord_msg(const char[] data, int data_size) {
-    char buffers[3][1024];
-    int channel_id = read_channel_id(data);
-
-    explode_binary(data[4], data_size - 4, buffers, 3, 1024);
-
     print_to_channel(channel_id, "\x07f1faee[%s] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1], buffers[2]);
 }
 
@@ -492,6 +627,9 @@ void parse_server_channels(const char[] data, int data_size) {
         }
         server_channels[c].channel_id = read_channel_id(data[bytes_consumed]);
         bytes_consumed += 4;
+        
+        server_channels[c].channel_flags = read_channel_flags(data[bytes_consumed]);
+        bytes_consumed += 2;
 
         if (bytes_consumed >= data_size) {
             break;
@@ -503,6 +641,10 @@ void parse_server_channels(const char[] data, int data_size) {
 
 int read_channel_id(const char[] data) {
     return (data[0]  << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+}
+
+int read_channel_flags(const char[] data) {
+    return (data[0] << 8) | data[1];
 }
 
 int explode_binary(const char[] data, int data_size, char[][] buffers, int num_buffers, int buffer_size) {
