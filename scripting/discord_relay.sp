@@ -9,31 +9,10 @@ public Plugin myinfo = {
     name = "Discord Relay",
     author = "Dreae <dreae@dreae.onl>",
     description = "Relays chat between discord and the server",
-    version = "0.5.0",
+    version = "0.5.1",
     url = "https://gitlab.com/Dreae/discord_relay.git"
 }
 
-#define CHANNEL_FLAG_ADMIN      (1<<0)
-#define CHANNEL_FLAG_PROTECTED  (1<<1)
-#define CHANNEL_FLAG_RECV_ALL   (1<<2)
-
-enum struct channel {
-    int channel_id;
-    char channel_name[255];
-    int channel_flags;
-}
-
-channel server_channels[256];
-int client_channel_id[MAXPLAYERS];
-int client_admin_channel_id[MAXPLAYERS];
-
-enum struct client_rate_limit {
-    int tokens;
-    Handle timer;
-}
-client_rate_limit client_rate_limits[MAXPLAYERS];
-
-EncryptedSocket socket = null;
 ConVar address_cvar = null;
 ConVar key_cvar = null;
 ConVar key_id_cvar = null;
@@ -41,16 +20,12 @@ ConVar advert_cvar = null;
 ConVar default_channel_cvar = null;
 ConVar default_admin_channel_cvar = null;
 
-Cookie listening_channel_cookie;
-Cookie admin_channel_cookie;
-float connection_attempt = 0.0;
-
-Handle advert_timer = null;
-int advert_idx = 0;
-char adverts[2][] = {
-    "\x07f1faee[Discord] \x07a8dadcThis server is connected to discord. Put a \x07e63946# \x07a8dadcin front of your message to chat with discord.",
-    "\x07f1faee[Discord] \x07a8dadcUse \x07e63946!discord \x07a8dadcto change your discord channel."
-};
+#include "discord_relay/channels.sp"
+#include "discord_relay/socket.sp"
+#include "discord_relay/rate_limit.sp"
+#include "discord_relay/client_prefs.sp"
+#include "discord_relay/chat.sp"
+#include "discord_relay/adverts.sp"
 
 public void OnPluginStart() {
     address_cvar = CreateConVar("discord_relay_address", "", "Address of the discord relay", 0, false, 0.0, false, 0.0);
@@ -82,15 +57,11 @@ public void OnMapStart() {
 }
 
 public void OnClientConnected(int client) {
-    client_rate_limits[client].tokens = 4;
-    client_rate_limits[client].timer = CreateTimer(10.0, add_rate_limit_tokens, client, TIMER_REPEAT);
+    init_rate_limit(client);
 }
 
 public void OnClientDisconnect(int client) {
-    if (client_rate_limits[client].timer != null) {
-        KillTimer(client_rate_limits[client].timer);
-        client_rate_limits[client].timer = null;
-    }
+    kill_rate_limit(client);
     client_channel_id[client] = 0;
 }
 
@@ -103,34 +74,7 @@ public void OnConfigsExecuted() {
 }
 
 public void OnClientCookiesCached(int client) {
-    if (listening_channel_cookie.GetClientTime(client) == 0) {
-        int default_channel_id = default_channel_cvar.IntValue;
-        if (default_channel_id == 0) {
-            default_channel_id = 0xffffffff
-        }
-
-        char channel_buffer[12];
-        IntToString(default_channel_id, channel_buffer, sizeof(channel_buffer));
-        listening_channel_cookie.Set(client, channel_buffer);
-        client_channel_id[client] = default_channel_id;
-    } else {
-        char channel_buffer[12];
-        listening_channel_cookie.Get(client, channel_buffer, sizeof(channel_buffer));
-        client_channel_id[client] = StringToInt(channel_buffer);
-    }
-
-    if (admin_channel_cookie.GetClientTime(client) == 0) {
-        int default_channel_id = default_admin_channel_cvar.IntValue;
-
-        char channel_buffer[12];
-        IntToString(default_channel_id, channel_buffer, sizeof(channel_buffer));
-        admin_channel_cookie.Set(client, channel_buffer);
-        client_admin_channel_id[client] = default_channel_id;
-    } else {
-        char channel_buffer[12];
-        admin_channel_cookie.Get(client, channel_buffer, sizeof(channel_buffer));
-        client_admin_channel_id[client] = StringToInt(channel_buffer);
-    }
+    load_client_prefs(client);
 }
 
 public Action cmd_list_channels(int args) {
@@ -153,7 +97,7 @@ Menu build_discord_menu(int client) {
     }
     
     while (server_channels[c].channel_id != 0) {
-        if (server_channels[c].channel_flags & CHANNEL_FLAG_ADMIN != 0) {
+        if (server_channels[c].admin_channel()) {
             c++;
             continue;
         }
@@ -186,7 +130,7 @@ Menu build_discord_admin_menu(int client) {
     }
     
     while (server_channels[c].channel_id != 0) {
-        if (server_channels[c].channel_flags & CHANNEL_FLAG_ADMIN == 0) {
+        if (!server_channels[c].admin_channel()) {
             c++;
             continue;
         }
@@ -297,110 +241,6 @@ public void config_changed(ConVar convar, const char[] old_value, const char[] n
     start_reconnect();
 }
 
-public void advert_cvar_changed(ConVar convar, const char[] old_value, const char[] new_value) {
-    if (advert_cvar.BoolValue) {
-        print_advert(null);
-        if (advert_timer == null) {
-            advert_timer = CreateTimer(120.0, print_advert, _, TIMER_REPEAT);
-        }
-    } else {
-        if (advert_timer != null) {
-            KillTimer(advert_timer);
-            advert_timer = null;
-        }
-    }
-}
-
-Action print_advert(Handle timer) {
-    if (socket.Connected()) {
-        c_print_to_chat_all(adverts[advert_idx]);
-        advert_idx++;
-
-        if (advert_idx == sizeof(adverts)) {
-            advert_idx = 0;
-        }
-    }
-    return Plugin_Continue;
-}
-
-Action add_rate_limit_tokens(Handle timer, int client) {
-    if (client_rate_limits[client].tokens < 4) {
-        client_rate_limits[client].tokens++;
-    }
-
-    return Plugin_Continue;
-}
-
-void init_client_settings() {
-    for (int c = 1; c <= MaxClients; c++) {
-        if (IsClientConnected(c)) {
-            if (AreClientCookiesCached(c)) {
-                OnClientCookiesCached(c);
-            }
-
-            OnClientConnected(c);
-        }
-    }
-}
-
-void reconnect_socket() {
-    if (socket != null) {
-        socket.Close();
-    }
-    
-    char key_id[64];
-    char key[256];
-
-    key_id_cvar.GetString(key_id, sizeof(key_id));
-    key_cvar.GetString(key, sizeof(key));
-    if (strlen(key) == 0 || strlen(key_id) == 0) {
-        return;
-    }
-
-    socket = new EncryptedSocket(key_id, key, OnRelayData);
-
-    char address[32];
-    address_cvar.GetString(address, sizeof(address));
-    if (strlen(address) == 0) {
-        return;
-    }
-
-    char parts[2][24];
-    if (ExplodeString(address, ":", parts, 2, 24, false) != 2) {
-        LogError("Error parsing relay address %s", address);
-        return;
-    }
-
-    socket.Connect(parts[0], StringToInt(parts[1]), on_connected);
-    socket.OnDisconnected(on_disconnected);
-}
-
-void start_reconnect() {
-    if (socket == null || !socket.Connected()) {
-        CreateTimer(Pow(2.0, connection_attempt) - 1.0, reconnect_timer, _, TIMER_FLAG_NO_MAPCHANGE);
-        if (connection_attempt < 6.0) {
-            connection_attempt = connection_attempt + 1.0;
-        }
-    }
-}
-
-public void on_connected(EncryptedSocket _socket) {
-    request_channels();
-}
-
-public void on_disconnected(EncryptedSocket _socket) {
-    start_reconnect();
-}
-
-public Action reconnect_timer(Handle timer) {
-    if (socket == null || !socket.Connected()) {
-        reconnect_socket();
-        start_reconnect();
-    } else {
-        connection_attempt = 0.0;
-    }
-}
-
 public Action OnClientSayCommand(int client, const char[] command, const char[] args) {
     if (args[0] != CHAT_SYMBOL) {
         return Plugin_Continue;
@@ -471,199 +311,4 @@ void add_channel_id(int channel_id, char[] buffer) {
     buffer[1] = (channel_id >> 16) & 0xff;
     buffer[2] = (channel_id >> 8) & 0xff;
     buffer[3] = channel_id & 0xff;
-}
-
-void request_channels() {
-    if (socket != null && socket.Connected()) {
-        socket.Send("\xff\xff\xff\x05", 4);
-    }
-}
-
-public void OnRelayData(const char[] data, int data_size) {
-    if (data_size < 4) {
-        return;
-    }
-
-    if (data[0] == '\xff' && data[1] == '\xff' && data[2] == '\xff') {
-        if (data[3] == '\x02') {
-            print_server_msg(data[4], data_size - 4);
-        } else if (data[3] == '\x04') {
-            print_announcement(data[4], data_size - 4);
-        } else if (data[3] == '\x06') {
-            parse_server_channels(data[4], data_size - 5);
-        }
-    }
-}
-
-void c_print_to_chat_all(const char[] msg, any ...) {
-    char buffer[1024];
-    VFormat(buffer, sizeof(buffer), msg, 2);
-
-    UserMsg id = GetUserMessageId("SayText2");
-    if (id == INVALID_MESSAGE_ID) {
-        PrintToChatAll(buffer);
-    } else {
-        Handle usr_msg = StartMessageAll("SayText2", USERMSG_RELIABLE | USERMSG_BLOCKHOOKS);
-        if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf) {
-            PbSetInt(usr_msg, "ent_idx", 0);
-            PbSetInt(usr_msg, "chat", true);
-            PbSetString(usr_msg, "msg_name", buffer);
-            PbAddString(usr_msg, "params", "");
-            PbAddString(usr_msg, "params", "");
-            PbAddString(usr_msg, "params", "");
-            PbAddString(usr_msg, "params", "");
-        } else {
-            BfWriteByte(usr_msg, 0); // Message author
-            BfWriteByte(usr_msg, true); // Chat message
-            BfWriteString(usr_msg, buffer); // Message text
-        }
-        EndMessage();
-    }
-}
-
-void c_print_to_chat_ex(int[] clients, int num_clients, const char[] msg) {
-    UserMsg id = GetUserMessageId("SayText2");
-    if (id == INVALID_MESSAGE_ID) {
-        for (int client = 0; client < num_clients; client++) {
-            PrintToChat(clients[client], msg);
-        }
-    } else {
-        Handle usr_msg = StartMessage("SayText2", clients, num_clients, USERMSG_RELIABLE | USERMSG_BLOCKHOOKS);
-        if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf) {
-            PbSetInt(usr_msg, "ent_idx", 0);
-            PbSetInt(usr_msg, "chat", true);
-            PbSetString(usr_msg, "msg_name", msg);
-            PbAddString(usr_msg, "params", "");
-            PbAddString(usr_msg, "params", "");
-            PbAddString(usr_msg, "params", "");
-            PbAddString(usr_msg, "params", "");
-        } else {
-            BfWriteByte(usr_msg, 0); // Message author
-            BfWriteByte(usr_msg, true); // Chat message
-            BfWriteString(usr_msg, msg); // Message text
-        }
-        EndMessage();
-    }
-}
-
-void c_print_to_chat(int client, const char[] msg, any ...) {
-    char buffer[1024];
-    VFormat(buffer, sizeof(buffer), msg, 3);
-    int clients[1];
-    clients[0] = client;
-
-    c_print_to_chat_ex(clients, 1, buffer);
-}
-
-void print_to_channel(int channel_id, const char[] msg, any ...) {
-    char buffer[1024];
-    VFormat(buffer, sizeof(buffer), msg, 3);
-    int[] clients = new int[MaxClients];
-    int num_clients = 0;
-
-    for (int c = 0; c < sizeof(server_channels); c++) {
-        if (server_channels[c].channel_id == channel_id) {
-            bool admin_channel = server_channels[c].channel_flags & CHANNEL_FLAG_ADMIN != 0;
-            if (admin_channel) {
-                Format(buffer, sizeof(buffer), "\x07e63946Admins %s", buffer);
-            }
-            
-            for (int client = 1; client <= MaxClients; client++) {
-                if (!AreClientCookiesCached(client)) {
-                    continue;
-                }
-
-                if (admin_channel) {
-                    AdminId admin = GetUserAdmin(client);
-                    if (admin != INVALID_ADMIN_ID && admin.HasFlag(Admin_Kick, Access_Effective)) {
-                        int client_admin_channel = client_admin_channel_id[client];
-                        if (client_admin_channel == channel_id || client_admin_channel == 0xffffffff) {
-                            clients[num_clients] = client;
-                            num_clients++;
-                        }
-                    }
-                } else {
-                    int client_channel = client_channel_id[client];
-                    if (client_channel == channel_id || client_channel == 0xffffffff) {
-                        clients[num_clients] = client;
-                        num_clients++;
-                    }
-                }
-            }
-
-            c_print_to_chat_ex(clients, num_clients, buffer);
-
-            return;
-        }
-    }
-}
-
-void print_server_msg(const char[] data, int data_size) {
-    char buffers[3][1024];
-    int channel_id = read_channel_id(data);
-
-    explode_binary(data[4], data_size - 4, buffers, 3, 1024);
-    
-    print_to_channel(channel_id, "\x07f1faee[%s] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1], buffers[2]);
-}
-
-void print_announcement(const char[] data, int data_size) {
-    char buffers[2][1024];
-    int channel_id = read_channel_id(data);
-
-    explode_binary(data[4], data_size - 4, buffers, 2, 1024);
-
-    print_to_channel(channel_id, "\x07e63946[Annoucement] \x071d3557%s: \x07a8dadc%s", buffers[0], buffers[1]);
-}
-
-void parse_server_channels(const char[] data, int data_size) {
-    int num_channels = data[0];
-    LogMessage("Channel update, reading %d channels", num_channels);
-
-    int bytes_consumed = 1;
-    for (int c = 0; c < num_channels; c++) {
-        if (bytes_consumed >= data_size) {
-            break;
-        }
-        server_channels[c].channel_id = read_channel_id(data[bytes_consumed]);
-        bytes_consumed += 4;
-        
-        server_channels[c].channel_flags = read_channel_flags(data[bytes_consumed]);
-        bytes_consumed += 2;
-
-        if (bytes_consumed >= data_size) {
-            break;
-        }
-        strcopy(server_channels[c].channel_name, 256, data[bytes_consumed]);
-        bytes_consumed += strlen(server_channels[c].channel_name) + 1;
-    }
-}
-
-int read_channel_id(const char[] data) {
-    return (data[0]  << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
-}
-
-int read_channel_flags(const char[] data) {
-    return (data[0] << 8) | data[1];
-}
-
-int explode_binary(const char[] data, int data_size, char[][] buffers, int num_buffers, int buffer_size) {
-    int buffer = 0;
-    int i = 0;
-    for (int c = 0; c < data_size; c++) {
-        if (data[c] == '\0') {
-            buffer++;
-            i = 0;
-            if (buffer > num_buffers) {
-                break;
-            }
-        } else {
-            if (i > buffer_size) {
-                continue;
-            }
-            
-            buffers[buffer][i] = data[c]
-            i++;
-        }
-    }
 }
